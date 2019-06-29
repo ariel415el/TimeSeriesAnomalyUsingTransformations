@@ -1,0 +1,16 @@
+5/6/2019:   - Started Git project.
+			- Reproduced Paper's result on Mnist with 1 as normal digit
+
+9/6/2019:   - Created a generic series trainer based on classification datasets.
+12/6/2019:  - generic series does not converge yet. Tryin an alternative with continous functions.
+
+15/6/2019   - continous functions : taining with linear fuctions as normal seem to converge. 
+				* Model can diffrentiate between linear functions and noise ( Not really, seem to overfeat)
+				* Model Seeem to overfeat sinusoids
+				* Trying Elhanan suggestion for quantizing the serie and generating all permutations over segments
+				* 22/6 still overfeats
+
+29/6/2019: - Still with continous functions.
+				 * Training on increasing linear (no bias) functions with 100 random permutations converged.
+				 * Model is able to differentiate from sinus, normal noise and  decreasing functions
+
