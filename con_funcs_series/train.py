@@ -4,7 +4,7 @@ import sys
 import time
 import numpy as np
 import pickle
-
+import tqdm
 
 import data_loader
 import models
@@ -35,6 +35,15 @@ def train(args, model, device, train_loader, optimizer, epoch, tb_writer):
     for batch_idx, (data, target) in enumerate(train_loader):
         # if batch_idx > 1000000: 
         #     break
+        #     
+        if batch_idx ==0:
+            for j in range(5):
+                np_serie = data[j].cpu().numpy().reshape(data.shape[2])
+                plt.plot(range(len(np_serie)), np_serie)
+                # import pdb; pdb.set_trace()
+                plt.savefig(os.path.join("train_debug","series_%d_%d"%(j,target[j].item())))
+                plt.clf()
+            
         data = data.to(device)
         target = target.to(device)
 
@@ -43,10 +52,8 @@ def train(args, model, device, train_loader, optimizer, epoch, tb_writer):
         # import pdb;pdb.set_trace()
         loss = nn.CrossEntropyLoss()(output, target)
         
-
         loss_mini_batch += loss.item()
         loss.backward()
-
 
         pred = F.softmax(output,dim=1).argmax(dim=1, keepdim=True) # get the index of the max log-probability
         mini_batch_correct += pred.eq(target.view_as(pred)).sum().item()
@@ -79,13 +86,24 @@ def validate(args, model, device, val_loader):
     correct = 0
     num_batchs = len(val_loader)
     with torch.no_grad():
+
         for i, (data, target) in enumerate(val_loader):
             data, target = data.to(device), target.to(device)
 
+            # if i ==0:
+            #     for j in range(5):
+            #         np_serie = data[j].cpu().numpy().reshape(data.shape[2])
+            #         plt.plot(range(len(np_serie)), np_serie)
+            #         # import pdb; pdb.set_trace()
+            #         plt.savefig(os.path.join("val_debug","series_%d_%d"%(j,target[j].item())))
+            #         plt.clf()
+
             # Inference
             output = model(data)
-            # val_loss += F.nll_loss(output, target).item() # sum up batch loss
-            val_loss += nn.CrossEntropyLoss()(output, target).item() # sum up batch loss
+
+            batch_loss = nn.CrossEntropyLoss()(output, target).item()
+            # print("validation batch loss: %f "%batch_loss)
+            val_loss += batch_loss # sum up batch loss
 
             output = F.softmax(output,dim=1)
             pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
@@ -93,14 +111,14 @@ def validate(args, model, device, val_loader):
             # import pdb;pdb.set_trace()
 
 
-    val_loss /= num_batchs
-    print('Validation: Average loss: {:.6f}, correct {}/{}'.format(val_loss, correct,len(val_loader.dataset)))
+    b_val_loss = val_loss /  num_batchs
+    print('Validation: Average loss: {:.6f}({}/{}), correct {}/{}'.format(b_val_loss, val_loss, num_batchs, correct,len(val_loader.dataset)))
 
-    return val_loss
+    return b_val_loss
 
 def test(args, model, device, test_loader, all_permutations, debug_dir=None):
     model.eval()
-    result_dict ={i:{"score":0,"#":0} for i in range(4)}
+    result_dict ={i:{"score":0,"#":0} for i in range(2)}
     if not os.path.exists("test_debug"):
         os.makedirs("test_debug")
     with torch.no_grad():
@@ -117,13 +135,15 @@ def test(args, model, device, test_loader, all_permutations, debug_dir=None):
             output = F.softmax(output,dim=1)
 
             pred = output.argmax(dim=1, keepdim=True)
-            # if i  < 10:
-            #     for j in range(5):
-            #         np_serie = permed_series[j][0].cpu().numpy()
-            #         plt.plot(range(len(np_serie)), np_serie)
-            #         plt.savefig(os.path.join("test_debug","series_%d_%d"%(i,j)))
-            #         plt.clf()
-            # import pdb;pdb.set_trace()
+            if i  < 10:
+                plt.plot(range(len(permed_series[0][0].cpu().numpy())), serie.cpu().numpy().reshape(-1))
+                plt.savefig(os.path.join("test_debug","series_%d.png"%i))
+                plt.clf()
+                for j in range(5):
+                    np_serie = permed_series[j][0].cpu().numpy()
+                    plt.plot(range(len(np_serie)), np_serie)
+                    plt.savefig(os.path.join("test_debug","series_%d_%d_%d.png"%(i,j,noise_type)))
+                    plt.clf()
 
             target = torch.tensor(range(len(all_permutations))).view(len(all_permutations),1).cuda()
             
@@ -150,7 +170,6 @@ if __name__ == '__main__':
     parser.add_argument('--test', action='store_true', default=False)
     parser.add_argument('--train_dir', type=str, default="train_dir")
 
-
     parser.add_argument('--num_workers', type=int, default=6)
     parser.add_argument('--pin_memory', action='store_false', default=True)
     parser.add_argument('--seed', type=int, default=1)
@@ -167,7 +186,7 @@ if __name__ == '__main__':
 
     train_dataset = data_loader.con_func_series_dataset(num_series=10000, max_permutaions=100)
     permutations = train_dataset.get_permutations()
-    val_dataset = data_loader.con_func_series_dataset(num_series=500, permutations=permutations)
+    val_dataset = data_loader.con_func_series_dataset(num_series=1000, permutations=permutations)
     if not os.path.exists(args.train_dir):
         os.makedirs(args.train_dir)  
 
@@ -176,7 +195,7 @@ if __name__ == '__main__':
         perms = np.loadtxt(os.path.join(args.train_dir, str(train_dataset)+"_perms.txt"), dtype=int)
         train_dataset.set_permutations(perms)
         val_dataset.set_permutations(perms)
-        model = model_calss(train_dataset.get_serie_length(), train_dataset.get_num_permutations()).to(device)
+        model = model_calss(train_dataset.get_serie_length(), len(perms)).to(device)
         model.load_state_dict(torch.load(args.trained_model))
     else:
         np.savetxt(os.path.join(args.train_dir, str(train_dataset)+"_perms.txt"), permutations, fmt='%d')
@@ -187,7 +206,7 @@ if __name__ == '__main__':
         val_loss = validate(args, model, device, test_loader)
 
         val_dataset.test()
-        test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, **kwargs)
+        test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=True, **kwargs)
 
         print("val_loss: ", val_loss)
         test(args, model, device, test_loader, val_dataset.get_permutations())
@@ -217,5 +236,4 @@ if __name__ == '__main__':
             best_val = val_loss                
             torch.save(model.state_dict(), os.path.join(args.train_dir, str(train_dataset) + "_%.5f_ckp.pt"%best_val))
 
-        if epoch % 8 == 0:
-            decrease_learning_rate(optimizer, args.lr_decay)
+        decrease_learning_rate(optimizer, args.lr_decay)

@@ -33,51 +33,94 @@ def create_segment_transforms(num_segments, segment_length):
   # geometric
 
 
-def generate_linear(mul_max=10, bias_max=100):
-  while True:
-    mult = np.random.uniform(-1*mul_max, mul_max, 1)
-    bias = 0#np.random.uniform(-1*bias_max, bias_max, 1)
-    def f(x):
-      return x*mult + bias
-    yield f 
-
-def generate_increasing_linear(mul_max=10, bias_max=0):
-  while True:
-    mult = np.random.uniform(0, mul_max, 1)
-    bias = 0#np.random.uniform(0, bias_max, 1)
-    def f(x):
-      return x*mult + bias
-    yield f
-
-def generate_decreasing_linear(mul_max=10, bias_max=0):
-  while True:
-    mult = np.random.uniform(-1*mul_max,0 , 1)
-    bias = 0#np.random.uniform(0, bias_max, 1)
-    def f(x):
-      return x*mult + bias
-    yield f
-
-
-def generate_sinus(max_amplitude=100, max_freq=2*np.pi):
-  while True:
-    freq = np.random.uniform(0, max_freq, 1)
-    amp = np.random.uniform(-1*max_amplitude, max_amplitude, 1)
-    
-    def f(x):
-      return amp*np.sin(x*freq)
-    yield f 
-
-
-def generate_linear_sinus(mul_max=10, bias_max=100, max_amplitude=100, max_freq=2*np.pi):
+def generate_linear(mul_max=1000, bias_max=10000):
+  class f:
+    def __init__(self,m,b):
+      self.m = m
+      self.b = b
+    def __call__(self,x):
+      return x*self.m + self.b
   while True:
     mult = np.random.uniform(-1*mul_max, mul_max, 1)
     bias = np.random.uniform(-1*bias_max, bias_max, 1)
-    freq = np.random.uniform(0, max_freq, 1)
+    yield f(mult, bias) 
+
+def generate_increasing_linear(mul_max=1000, bias_max=10000):
+  class f:
+    def __init__(self,m,b):
+      self.m = m
+      self.b = b
+    def __call__(self,x):
+      return x*self.m + self.b
+  while True:
+    mult = np.random.uniform(0, mul_max, 1)
+    bias = np.random.uniform(0, bias_max, 1)
+    yield f(mult, bias) 
+
+def generate_decreasing_linear(mul_max=1000, bias_max=10000):
+  class f:
+    def __init__(self,m,b):
+      self.m = m
+      self.b = b
+    def __call__(self,x):
+      return x*self.m + self.b
+  while True:
+    mult = np.random.uniform(-1*mul_max, 0 , 1)
+    bias = np.random.uniform(0, bias_max, 1)
+    yield f(mult, bias) 
+
+
+def generate_sinus(max_amplitude=2, max_freq=np.pi/8):
+  class f:
+    def __init__(self,freq, amp):
+      self.freq = freq
+      self.amp = amp
+    def __call__(self,x):
+      return self.amp*np.sin(x*self.freq)
+
+  while True:
+    freq = np.random.uniform(max_freq/2, max_freq, 1)
     amp = np.random.uniform(-1*max_amplitude, max_amplitude, 1)
-    
-    def f(x):
-      return amp*np.sin(x*freq) + x*mult + bias
-    yield f 
+    yield f(freq, amp) 
+
+
+def generate_linear_sinus(mul_max=10, bias_max=100, max_amplitude=50, max_freq=np.pi/2):
+  class f:
+    def __init__(self,mult, bias, freq, amp):
+      self.mult = mult
+      self.bias = bias
+      self.freq = freq
+      self.amp = amp
+
+    def __call__(self,x):
+      return self.amp*np.sin(x*self.freq) + x*self.mult + self.bias
+
+  while True:
+      mult = np.random.uniform(-1*mul_max, mul_max, 1)
+      bias = np.random.uniform(-1*bias_max, bias_max, 1)
+      freq = np.random.uniform(max_freq/2, max_freq, 1)
+      amp = np.random.uniform(-1*max_amplitude, max_amplitude, 1)
+      yield f(mult, bias, freq, amp)
+
+def generate_power_sinus(*coef_maxs, max_amplitude=50, max_freq=np.pi/2):
+  class f:
+    def __init__(self, freq, amp, *coef_maxs):
+      self.coef_maxs = coef_maxs
+      self.freq = freq
+      self.amp = amp
+
+    def __call__(self,x):
+      line = 0
+      for k in range(len(self.coef_maxs)):
+        line += self.coef_maxs[k]*(x**k)
+      return self.amp*np.sin(x*self.freq) + line
+
+  while True:
+      # import pdb; pdb.set_trace()
+      coefs = [np.random.uniform(-1*coef_maxs[i], coef_maxs[i]) for i in range(len(coef_maxs))]
+      freq = np.random.uniform(max_freq/2, max_freq)
+      amp = np.random.uniform(-1*max_amplitude, max_amplitude)
+      yield f(freq, amp, *coefs)
 
 class con_func_series_dataset(torch.utils.data.Dataset):
   def __init__(self, num_series=10000, max_permutaions=1000, train=True, permutations=None):
@@ -89,14 +132,17 @@ class con_func_series_dataset(torch.utils.data.Dataset):
     self.serie_length = self.num_segments*self.segment_size
     serie = np.linspace(-100, 100, num=self.serie_length)
     self.segments = [serie[i*self.segment_size:(i+1)*self.segment_size] for i in range(self.num_segments)]
-    print("# Creating")
+    print("# Creating funcs")
+    self.lin_generator = generate_linear()
     self.inc_lin_generator = generate_increasing_linear()
     self.dec_lin_generator = generate_decreasing_linear()
-    self.sin_generator = generate_sinus()
+    self.sin_generator = generate_linear_sinus()
+    self.power_sin_generator = generate_power_sinus(128,16,2, max_amplitude=256, max_freq=np.pi/2)
+
     # func_generator = generate_linear_sinus()
 
-    self.funcs = [next(self.inc_lin_generator) for i in range(self.num_series)]
-
+    self.funcs = [next(self.power_sin_generator) for i in range(self.num_series)]
+    # import pdb; pdb.set_trace()
     print("\t creating perms")
     # perms = list(itertools.permutations(np.arange(self.serie_length)))
     # if len(perms) > max_permutaions:
@@ -165,16 +211,22 @@ class con_func_series_dataset(torch.utils.data.Dataset):
 
     else:
       s = np.random.uniform(0,1,1)[0]
-      if s > 0.8:
-        func = next(self.inc_lin_generator)
-        return np.array([func(seg) for seg in self.segments]).astype(np.float32), 0
-      elif s  > 0.6:
-         return np.array([np.random.normal(0, 0.1, self.segment_size) for seg in self.segments]).astype(np.float32), 1
-      elif s > 0.4:
-        func = next(self.dec_lin_generator)
-        return np.array([func(seg) for seg in self.segments]).astype(np.float32), 2
+      func = self.funcs[index]
+      y_segments = np.array([func(seg) for seg in self.segments])
+      if s > 0.5:
+        # func = next(self.sin_generator)
+        return y_segments.astype(np.float32), 0
+      # elif s > 0.3:
+
       else:
-        func = next(self.sin_generator)
-        return np.array([func(seg) for seg in self.segments]).astype(np.float32), 3
+        random_segment_index = np.random.randint(0,self.num_segments)
+        mean = y_segments[random_segment_index].mean()
+        radius = y_segments[random_segment_index].max() - y_segments[random_segment_index].min()
+        disturbed_index = random.sample(range(self.segment_size), max(1,int(self.segment_size*0.3)))
+        y_segments[random_segment_index][disturbed_index] += np.random.uniform(-1, 1, len(disturbed_index))*radius*3
+        # random_point_index = numpy.random.randint(0,self.segment_size)
+        return y_segments.astype(np.float32), 1
+      
+
 
 

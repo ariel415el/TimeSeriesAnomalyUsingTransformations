@@ -13,4 +13,13 @@
 29/6/2019: - Still with continous functions.
 				 * Training on increasing linear (no bias) functions with 100 random permutations converged.
 				 * Model is able to differentiate from sinus, normal noise and  decreasing functions
+				 * Same results with 412 permutations
+				 * Two major bugs were detected
+				 	1: The fuction generator returned the same function in different next() calls
+				 	2: I had dropout after the convolution layer created major and wierd gap between train and val (lower val)
+				 * Model learned
 
+5/7/2019   - Model  was able to learn linear sinusoid and differentioate between it and noise.
+		   - Now trying to add local anomalies: the model is able yo detect when noise is added to 30% of a random segments.
+		   - trying higher order sinusoids as last POC:
+		   		only after browdening the FC latent layer the model was able to train. Again able to detect noise added to 30% of random segment
