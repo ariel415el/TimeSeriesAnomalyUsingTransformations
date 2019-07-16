@@ -18,7 +18,7 @@ from tqdm import tqdm
 from train import write_array_as_video
 
 class Ball:
-    def __init__(self, frame_size, ball_size, hue, size_growth=0, no_wall=False):
+    def __init__(self, frame_size, ball_size, shape, hue, size_growth=0, no_wall=False):
         self.size_growth = size_growth
         self.frame_size = frame_size
         self.size = ball_size
@@ -28,6 +28,7 @@ class Ball:
         self.speedy = random.randrange(1, 5)
         self.hue = hue
         self.no_wall = no_wall
+        self.shape  = shape
 
     def update(self):
         self.size += self.size_growth
@@ -61,19 +62,28 @@ def stump_ball(frame, ball, color):
 
     if xA > xB or yA > yB:
         return
-    cv2.rectangle(frame, (xA, yA),(xB, yB), color, cv2.FILLED)
+    if ball.shape == 0:
+      cv2.rectangle(frame, (xA, yA),(xB, yB), color, cv2.FILLED)
+    elif ball.shape == 1:
+      cv2.circle(frame,(int((xA+xB)/2), int((yA+yB)/2)), int(ball.size/2), color, cv2.FILLED)
+
+    elif ball.shape == 2:
+      cv2.rectangle(frame, (int((xA+xB)/2), yA),(int((xA+xB)/2), yB), color, cv2.FILLED)
+      triangle_cnt = np.array( [(int((xA+xB)/2), yA), int((xA, (yA+yB)/2)), (xB, int((yA+yB)/2))] )
+      cv2.drawContours(frame, [triangle_cnt], 0, color, -1)
 
 def create_video(frame_size, num_frames, max_ball_size, max_balls, create_anomaly=False):
-    num_balls = 1# np.random.randint(1,max_balls)
+    num_balls =  np.random.randint(1,max_balls)
     background_hue = np.random.randint(0,128)
     ball_list = []
     for i in range(num_balls):
+        ball_shape = random.randrange(0, 2)
         ball_hue = np.random.randint(background_hue+72, 255)
         size = random.randrange(2, max_ball_size)
         if create_anomaly:
-          ball_list.append(Ball(frame_size, size,  ball_hue, size_growth=-1, no_wall=False))
+          ball_list.append(Ball(frame_size, size, ball_shape, ball_hue, size_growth=-1, no_wall=False))
         else:
-          ball_list.append(Ball(frame_size, size,  ball_hue, size_growth=0, no_wall=False))
+          ball_list.append(Ball(frame_size, size, ball_shape, ball_hue, size_growth=0, no_wall=False))
 
     all_frames = []
     # writer = cv2.VideoWriter('test1.avi', cv2.VideoWriter_fourcc(*'PIM1'), 25, (frame_size, frame_size), False)
@@ -99,7 +109,7 @@ class balls_dataset(torch.utils.data.Dataset):
     print("# Creating videos")
     self.videos = []
     for i in tqdm(range(self.num_videos)):
-      self.videos += [create_video(self.frame_size, self.video_length, max_ball_size=32, max_balls=1, create_anomaly=False)]
+      self.videos += [create_video(self.frame_size, self.video_length, max_ball_size=32, max_balls=4, create_anomaly=False)]
 
     for i in range(5):
       write_array_as_video(self.videos[i].astype(np.uint8), os.path.join("train_debug", "DL_series_%d.avi"%i))

@@ -23,3 +23,6 @@
 		   - Now trying to add local anomalies: the model is able yo detect when noise is added to 30% of a random segments.
 		   - trying higher order sinusoids as last POC:
 		   		only after browdening the FC latent layer the model was able to train. Again able to detect noise added to 30% of random segment
+
+11/7/2019  - Built a new phisics engine and workflow to detect anomaly in simple synthetic videos of bouncing rectangles
+12/7/2019  - Imported an architecture of 3Dcnn that is used to classifiy videos. model does not converge yet 

@@ -184,6 +184,8 @@ class ResCNNEncoder(nn.Module):
         self.fc3 = nn.Linear(fc_hidden2, CNN_embed_dim)
         
     def forward(self, x_3d):
+        x_3d = x_3d.unsqueeze(2)
+        x_3d = x_3d.expand(x_3d.shape[0],x_3d.shape[1],3, x_3d.shape[3],x_3d.shape[4])
         cnn_embed_seq = []
         for t in range(x_3d.size(1)):
             # ResNet CNN
@@ -241,4 +243,5 @@ class DecoderRNN(nn.Module):
         x = F.relu(x)
         x = F.dropout(x, p=self.drop_p, training=self.training)
         x = self.fc2(x)
+        return x
 

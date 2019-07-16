@@ -191,7 +191,7 @@ if __name__ == '__main__':
 
     train_dataset = data_loader.balls_dataset(frame_size=128, video_length=64, num_videos=100, max_permutaions=100)
     permutations = train_dataset.get_permutations()
-    val_dataset = data_loader.balls_dataset(frame_size=128, video_length=200, num_videos=100, permutations=permutations)
+    val_dataset = data_loader.balls_dataset(frame_size=128, video_length=64, num_videos=100, permutations=permutations)
     if not os.path.exists(args.train_dir):
         os.makedirs(args.train_dir)  
 
