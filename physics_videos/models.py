@@ -95,7 +95,7 @@ def conv3D_output_size(img_size, padding, kernel_size, stride):
     return outshape
 
 class CNN3D(nn.Module):
-    def __init__(self,num_classes, t_dim=48, img_x=128, img_y=128, drop_p=0.2, fc_hidden1=256, fc_hidden2=128):
+    def __init__(self,num_classes, t_dim=64, img_x=128, img_y=128, drop_p=0.2, fc_hidden1=256, fc_hidden2=128):
         super(CNN3D, self).__init__()
 
         # set video dimension
@@ -162,7 +162,7 @@ class CNN3D(nn.Module):
         x = self.fc3(x)
         # print(x.shape)
         x = x.squeeze(1)
-        return 
+        return  x
 
 
 # 2D CNN encoder using ResNet-152 pretrained

@@ -146,15 +146,13 @@ if __name__ == '__main__':
     device = torch.device("cuda")
 
     # model_calss = models.conv_FC
-    model_calss = models.CNN3D
 
-    MAX_BALLS=20
-    train_dataset = data_loader.bouncing_balls_dataset(frame_size=128, video_length=48, num_videos=100000, max_balls=MAX_BALLS)
-    val_dataset = data_loader.bouncing_balls_dataset(frame_size=128, video_length=48, num_videos=100, max_balls=MAX_BALLS)
+    train_dataset = data_loader.bouncing_balls_dataset(frame_size=128, video_length=48, num_videos=10000)
+    val_dataset = data_loader.bouncing_balls_dataset(frame_size=128, video_length=48, num_videos=1000)
     if not os.path.exists(args.train_dir):
         os.makedirs(args.train_dir)  
 
-    model = model_calss(MAX_BALLS).to(device)
+    model =  models.CNN3D(2).to(device)
     if args.trained_model != "":
         print("Loading model")
         model.load_state_dict(torch.load(args.trained_model))

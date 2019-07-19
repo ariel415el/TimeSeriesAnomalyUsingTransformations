@@ -72,8 +72,8 @@ def train(args, model, device, train_loader, optimizer, epoch, tb_writer):
             optimizer.step()
             optimizer.zero_grad()
             loss_mini_batch /= args.virtual_batch
-            if batch_idx > 0 and batch_idx% (args.virtual_batch*50) == 0:
-                gs = (epoch-1)*num_batchs_per_epoch+batch_idx
+            gs = (epoch-1)*num_batchs_per_epoch+batch_idx
+            if batch_idx > 0 and gs% (max(1,int(0.1*num_batchs_per_epoch))) == 0:
                 tb_writer.add_scalar('train_loss', torch.tensor(loss_mini_batch), global_step=gs)
                 num_processed_imgs = (batch_idx+1)*int(args.batch_size)
 
@@ -167,6 +167,7 @@ if __name__ == '__main__':
     parser.add_argument('--epochs', type=int, default=10)
     parser.add_argument('--lr', type=float, default=0.01)
     parser.add_argument('--lr_decay', type=float, default=0.4)
+    parser.add_argument('--decay_epochs', type=int, default=10)
 
     parser.add_argument('--trained_model', type=str, default="")
     parser.add_argument('--test', action='store_true', default=False)
@@ -188,9 +189,9 @@ if __name__ == '__main__':
     model_calss = models.CNN3D
 
 
-    train_dataset = data_loader.balls_dataset(frame_size=128, video_length=48, num_videos=100, max_permutaions=100)
+    train_dataset = data_loader.balls_dataset(frame_w=128, frame_h=128, video_length=64, num_videos=1000, max_permutaions=24)
     permutations = train_dataset.get_permutations()
-    val_dataset = data_loader.balls_dataset(frame_size=128, video_length=48, num_videos=100, permutations=permutations)
+    val_dataset = data_loader.balls_dataset(frame_w=128, frame_h=128, video_length=64, num_videos=100, permutations=permutations)
     if not os.path.exists(args.train_dir):
         os.makedirs(args.train_dir)  
 
@@ -239,5 +240,5 @@ if __name__ == '__main__':
         if val_loss < best_val:
             best_val = val_loss                
             torch.save(model.state_dict(), os.path.join(args.train_dir, str(train_dataset) + "_%.5f_ckp.pt"%best_val))
-
-        decrease_learning_rate(optimizer, args.lr_decay)
+        if epoch > 0 and  epoch % args.decay_epochs ==0:
+            decrease_learning_rate(optimizer, args.lr_decay)

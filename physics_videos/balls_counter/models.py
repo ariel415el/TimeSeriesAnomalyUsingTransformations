@@ -19,7 +19,7 @@ def conv_dw(inp, oup, stride, kernel_size=3):
         nn.Conv2d(inp, oup, 1, 1, 0, bias=False),
         nn.BatchNorm2d(oup),
         nn.ReLU(inplace=True),
-    )
+    )   
 
 
 class conv_FC(nn.Module):

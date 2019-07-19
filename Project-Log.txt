@@ -26,3 +26,17 @@
 
 11/7/2019  - Built a new phisics engine and workflow to detect anomaly in simple synthetic videos of bouncing rectangles
 12/7/2019  - Imported an architecture of 3Dcnn that is used to classifiy videos. model does not converge yet 
+16/7/2019  - Side experiment to check the 3dcnn architectue in understanding videos:
+			 Differentiate single bouncing ball videos with changing size from such with constant size
+		   			* Training succedded on 10000/1000 train/val videos
+
+16/7/2019  - Training the 3dcnn to learn permutaions over video frames of one object with specific figure, at test we compare reordering percentages
+		   	  with other figures:
+		   	  	* Model learned permutation on a square but failed to differentite in test from other 4 figures
+		   	  	  This may be due to the fact that the details of the figures does not matter since one can regard them all as blobs and track them
+		   	  	  Maybe a more suitable poc scenario is one where the network has to focus on the object details to suceed.
+		   	  	  IDead: videos where the object chages shapes in a specific order.
+
+
+16/7/201    - I tried to differentiate betweeen two balls moving freely and two balls with an invisible wall between them. The model learned the permutations 
+		   	 but I'm not sure if it can differentioate ~99% vs ~90% accuracy
