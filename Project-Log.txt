@@ -5,8 +5,8 @@
 12/6/2019:  - generic series does not converge yet. Tryin an alternative with continous functions.
 
 15/6/2019   - continous functions : taining with linear fuctions as normal seem to converge. 
-				* Model can diffrentiate between linear functions and noise ( Not really, seem to overfeat)
 				* Model Seeem to overfeat sinusoids
+				* Model can diffrentiate between linear functions and noise ( Not really, seem to overfeat)
 				* Trying Elhanan suggestion for quantizing the serie and generating all permutations over segments
 				* 22/6 still overfeats
 
@@ -38,5 +38,7 @@
 		   	  	  IDead: videos where the object chages shapes in a specific order.
 
 
-16/7/201    - I tried to differentiate betweeen two balls moving freely and two balls with an invisible wall between them. The model learned the permutations 
-		   	 but I'm not sure if it can differentioate ~99% vs ~90% accuracy
+16/7/2019   - I tried to differentiate betweeen two balls moving freely and two balls with an invisible wall between them. The model learned the permutations 
+		   	 but I'm not sure if it can differentioate ~99% vs ~90% accurac
+		   	 
+17.7.2019   - Tryinh to add geometric transformation to the set of permutations. I first unrandimized the creation of the permutations and reproduces the results 				from above 89% vs 88%

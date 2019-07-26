@@ -189,22 +189,18 @@ if __name__ == '__main__':
     model_calss = models.CNN3D
 
 
-    train_dataset = data_loader.balls_dataset(frame_w=128, frame_h=128, video_length=64, num_videos=1000, max_permutaions=24)
+    train_dataset = data_loader.balls_dataset(frame_w=128, frame_h=128, video_length=64, num_videos=5000)
     permutations = train_dataset.get_permutations()
     val_dataset = data_loader.balls_dataset(frame_w=128, frame_h=128, video_length=64, num_videos=100, permutations=permutations)
     if not os.path.exists(args.train_dir):
         os.makedirs(args.train_dir)  
 
+    model = model_calss(len(permutations)).to(device)
+
     if args.trained_model != "":
         print("Loading model")
-        perms = np.loadtxt(os.path.join(args.train_dir, str(train_dataset)+"_perms.txt"), dtype=int)
-        train_dataset.set_permutations(perms)
-        val_dataset.set_permutations(perms)
-        model = model_calss( len(perms)).to(device)
         model.load_state_dict(torch.load(args.trained_model))
-    else:
-        np.savetxt(os.path.join(args.train_dir, str(train_dataset)+"_perms.txt"), permutations, fmt='%d')
-        model = model_calss(len(permutations)).to(device)
+
 
     if args.test:
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, **kwargs)

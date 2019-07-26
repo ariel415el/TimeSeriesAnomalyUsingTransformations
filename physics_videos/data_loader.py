@@ -17,6 +17,39 @@ import math
 from tqdm import tqdm
 from train import write_array_as_video
 
+
+def create_fixed_permutations(n):
+  perms = []
+  base = list(range(n))
+  for i in [2, 5, 7, n//4, n//2, n]:
+    copy = base.copy()
+    tmp = copy[::i]
+    tmp.reverse()
+    copy[::i] = tmp
+    perms += [copy]
+
+    copy = base.copy()
+    for j in range(n // i):
+      tmp = copy[j*i:(j+1)*i]
+      tmp.reverse()
+      copy[j*i:(j+1)*i] = tmp
+
+    tmp = copy[(j+1)*i:n]
+    tmp.reverse()
+    copy[(j+1)*i:n] = tmp
+
+    perms += [copy]
+
+  return perms
+
+def get_perm_applier(perm):
+  class f:
+    def __init__(self, perm):
+      self.perm = perm
+    def __call__(self, vid_arr_batch):
+      return vid_arr_batch[self.perm]
+  return f(perm)
+
 class Ball:
     def __init__(self, frame_w, frame_h, ball_size, shape, hue, size_growth=0, max_ball_size=32, no_wall=False):
         self.size_growth = size_growth
@@ -101,7 +134,7 @@ def stump_ball(frame, ball, color):
       cv2.line(frame, (xA, yA), (xB, yB), color, 2)
       cv2.line(frame, (xA, yB), (xB, yA), color, 2)
 
-def create_video(frame_w,frame_h, num_frames, num_balls, background_hue=None):
+def create_video(frame_w,frame_h, num_frames, num_balls, ball_shape=None, background_hue=None):
     # num_balls =  np.random.randint(1,max_balls)
     noise_magnitude = 5
     max_ball_size = int(min(frame_w,frame_h)/2)
@@ -113,7 +146,8 @@ def create_video(frame_w,frame_h, num_frames, num_balls, background_hue=None):
     for i in range(num_balls):
         ball_hue = np.random.randint(background_hue+72, 255)
         ball_size = random.randrange(2, max_ball_size)
-        ball_shape = random.randrange(0, 5)
+        if ball_shape is None:
+          ball_shape = random.randrange(0, 5)
 
         ball_list.append(Ball(frame_w, frame_h, ball_size, ball_shape, ball_hue, size_growth=0, max_ball_size=max_ball_size, no_wall=False))
 
@@ -130,17 +164,16 @@ def create_video(frame_w,frame_h, num_frames, num_balls, background_hue=None):
 
 
 class balls_dataset(torch.utils.data.Dataset):
-  def __init__(self, frame_w=256,frame_h=128, video_length=32, num_videos=1000, max_permutaions=1000, train=True, permutations=None):
+  def __init__(self, frame_w=256,frame_h=128, video_length=32, num_videos=1000, train=True, permutations=None):
     self.train = train
     self.frame_w = frame_w
     self.frame_h = frame_h
     self.video_length = video_length
     self.num_videos = num_videos
-    self.max_permutaions = max_permutaions
     print("# Creating videos")
     self.videos = []
     for i in tqdm(range(self.num_videos)):
-      video = create_video(self.frame_w, self.frame_h, self.video_length, 2)
+      video = create_video(self.frame_w, self.frame_h, self.video_length, num_balls=2)
       self.videos += [video]
 
     for i in range(5):
@@ -151,10 +184,13 @@ class balls_dataset(torch.utils.data.Dataset):
       self._permutations = permutations
     else:
       self._permutations = []
-      for i in range(max_permutaions):
-        perm = random.sample(range(self.video_length), self.video_length)
-        if perm not in self._permutations:
-          self._permutations += [perm]
+      # for i in range(max_permutaions):
+      #   perm = random.sample(range(self.video_length), self.video_length)
+      #   if perm not in self._permutations:
+      #     self._permutations += [perm]
+      perms = create_fixed_permutations(self.video_length)
+      for p in perms:
+        self._permutations += [get_perm_applier(p)]
 
     print("\t num permutations: %d"%len(self._permutations))
     print("\t num videos: %d"%len(self.videos))
@@ -164,8 +200,6 @@ class balls_dataset(torch.utils.data.Dataset):
   def __str__(self):
       return self.__repr__()
 
-  def set_permutations(self, perms):
-    self._permutations = perms
 
   def get_permutations(self):
         return self._permutations
@@ -198,7 +232,7 @@ class balls_dataset(torch.utils.data.Dataset):
       video = self.videos[func_index]
 
       perm = self._permutations[perm_index]
-      permuted_video = video[perm]
+      permuted_video = perm(video)
       # import pdb;pdb.set_trace()
 
       return permuted_video.astype(np.float32), perm_index
