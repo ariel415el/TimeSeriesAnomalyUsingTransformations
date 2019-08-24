@@ -82,3 +82,41 @@ class CNN3D(nn.Module):
         x = x.squeeze(1)
         # x = nn.functional.softmax(x, dim=1)
         return  x
+
+class multi_head_FC(nn.Module):
+    def __init__(self,num_classes, t_dim=64, img_x=128, img_y=128):
+        super(multi_head_FC, self).__init__()
+        intermediate_repr = 500
+        self.t_dim = t_dim
+        self.img_x = img_x
+        self.img_y = img_y
+        self.head = nn.Sequential(
+            nn.Conv2d(1, 2, 3, 1, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(2, 4, 3, 2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(4, 2, 3, 2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(2, 1, 3, 2, padding=1)
+        )
+        self.features_size = int(img_x/8*img_y/8)
+        self.fc1 = nn.Linear(t_dim*self.features_size, intermediate_repr)
+        self.fc2 = nn.Linear(intermediate_repr, num_classes)
+
+    def forward(self, x_3d):
+        features = []
+        # print(x_3d.shape)
+        for i in range(x_3d.shape[1]):
+            features.append(self.head(x_3d[:,i].unsqueeze(1)))
+        # print(len(features))
+        # print(features[0].shape)
+        features = torch.stack(features, dim=1)
+        # print(features.shape)
+        x = features.view(-1, self.features_size*self.t_dim)
+        # print(x.shape)
+        x = self.fc1(x)
+        x = F.relu(x)
+        # print(x.shape)
+        x = self.fc2(x)
+        # print(x.shape)
+        return x
