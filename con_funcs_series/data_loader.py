@@ -16,21 +16,21 @@ import itertools
 import math
 
 
-def create_segment_transforms(num_segments, segment_length):
-  transforms = []
-
-  # Noise
-  for i in range(1, num_segments):
-      def f(segments):
-        segments[i] = segments[i-1]
-      transforms += [f]
-  for i in range(num_segments):
-      def f(segments):
-        segments[i] = segments[i]*0+np.mean(segments)
-      transforms += [f]
-  # permutations:
-  
-  # geometric
+# def create_segment_transforms(num_segments, segment_length):
+#   transforms = []
+#
+#   # Noise
+#   for i in range(1, num_segments):
+#       def f(segments):
+#         segments[i] = segments[i-1]
+#       transforms += [f]
+#   for i in range(num_segments):
+#       def f(segments):
+#         segments[i] = segments[i]*0+np.mean(segments)
+#       transforms += [f]
+#   # permutations:
+#
+#   # geometric
 
 
 def generate_linear(mul_max=1000, bias_max=10000):
@@ -141,7 +141,7 @@ class con_func_series_dataset(torch.utils.data.Dataset):
 
     # func_generator = generate_linear_sinus()
 
-    self.funcs = [next(self.power_sin_generator) for i in range(self.num_series)]
+    self.funcs = [next(self.lin_generator) for i in range(self.num_series)]
     # import pdb; pdb.set_trace()
     print("\t creating perms")
     # perms = list(itertools.permutations(np.arange(self.serie_length)))

@@ -163,14 +163,14 @@ if __name__ == '__main__':
     parser.add_argument('--batch_size', type=int, default=128)
     parser.add_argument('--virtual_batch', type=int, default=1)
     parser.add_argument('--epochs', type=int, default=10)
-    parser.add_argument('--lr', type=float, default=0.01)
+    parser.add_argument('--lr', type=float, default=0.0001)
     parser.add_argument('--lr_decay', type=float, default=0.4)
 
     parser.add_argument('--trained_model', type=str, default="")
     parser.add_argument('--test', action='store_true', default=False)
     parser.add_argument('--train_dir', type=str, default="train_dir")
 
-    parser.add_argument('--num_workers', type=int, default=6)
+    parser.add_argument('--num_workers', type=int, default=0)
     parser.add_argument('--pin_memory', action='store_false', default=True)
     parser.add_argument('--seed', type=int, default=1)
     parser.add_argument('--test-batch-size', type=int, default=1000)
