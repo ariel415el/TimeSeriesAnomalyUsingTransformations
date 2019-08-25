@@ -42,3 +42,17 @@
 		   	 but I'm not sure if it can differentioate ~99% vs ~90% accurac
 		   	 
 17.7.2019   - Tryinh to add geometric transformation to the set of permutations. I first unrandimized the creation of the permutations and reproduces the results 				from above 89% vs 88%
+
+
+27.7.2019 	- After consulting Yedid and reading his pape with liron i implemented the affine matrices scenario.
+				I also changed the anomaly score to be minus log probability of the classification vector
+				Couldn't differentioate anomalous videos with invisible wall (0.8 fpr when tpr is 1)
+				results imprived to 0.73 fpr increasing from 32 to 100 random matrices
+
+8.7.2018	- Training on single square with 3dcnn (Classifying 100 random mats) was so good that it was completely able to 				generalize to videos where the  square moves incontinously.. 
+
+1.8.2019    - I tried replacing the 3dcnn with a feature extractor applied on all frames and then a conv net. Didn't work
+
+16.8.2019   - Fixed a bug with affine transformations: apply random affine on image coordinate insdtead of pixel values
+
+25.8.2019   - Rearranged all experiment in one python project (2d,1d data, frame permutations and affine transformation)

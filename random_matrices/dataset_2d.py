@@ -1,21 +1,11 @@
 import os
-from PIL import Image
-
-import torch
-from torchvision import datasets, transforms
-
-import abc
-import itertools
 import numpy as np
-import scipy.ndimage
-
-import matplotlib.pyplot as plt
 import cv2
 import random
-import itertools
-import math
 from tqdm import tqdm
-from utils import write_array_as_video
+from debug_utils import write_array_as_video
+
+import torch.utils.data
 
 class Ball:
     def __init__(self, frame_w, frame_h,
@@ -138,7 +128,7 @@ def create_video(frame_w,frame_h, num_frames, video_params):
     if video_params.background_hue is None:
         background_hue = np.random.randint(video_params.noise_magnitude, 128)
     else:
-      background_hue = self.background_hue
+      background_hue = video_params.background_hue
     ball_list = []
 
     for i in range(video_params.num_balls):
@@ -167,13 +157,13 @@ def create_video(frame_w,frame_h, num_frames, video_params):
     return np.array(all_frames)
 
 class balls_dataset(torch.utils.data.Dataset):
-  def __init__(self, frame_w=256,frame_h=128, video_length=32, num_videos=1000, train=True, transforms=[]):
-    self.num_data_classes = 6
+  def __init__(self, frame_w=256,frame_h=128, video_length=32, num_videos=1000, train=True, transforms=[], anomaly_type='Shapes'):
     self.train = train
     self.frame_w = frame_w
     self.frame_h = frame_h
     self.video_length = video_length
     self.num_videos = num_videos
+    self.anomaly_type = anomaly_type
     print("# Creating videos")
     self.videos = []
     vp = video_params()
@@ -182,16 +172,18 @@ class balls_dataset(torch.utils.data.Dataset):
       video = create_video(self.frame_w, self.frame_h, self.video_length, vp)
       self.videos += [video]
 
-    # Debug
-    for i in range(5):
-      write_array_as_video(self.videos[i].astype(np.uint8), os.path.join("train_debug", "DL_series_%d.avi"%i))
-
     self.transforms = transforms
     if len(self.transforms) == 0 :
       print("No transforms loaded")
       exit()
     print("\t num transforms: %d"%len(self.transforms))
     print("\t num videos: %d"%len(self.videos))
+
+  def __len__(self):
+    if self.train:
+        return len(self.videos)*len(self.transforms)
+    else:
+        return len(self.videos)
 
   def __getitem__(self, index):
     if self.train:
@@ -206,21 +198,33 @@ class balls_dataset(torch.utils.data.Dataset):
       return output_video.astype(np.float32), transform_index
 
     else:
-      
-        target =  random.randint(0,5)
-        vp = video_params()
-        vp.ball_shape=target
+        if self.anomaly_type == 'Shapes':
+            target =  random.randint(0,5)
+            vp = video_params()
+            vp.ball_shape=target
 
-        vid = create_video(int(self.frame_w), self.frame_h, self.video_length, vp)
-        return vid, target
+            vid = create_video(int(self.frame_w), self.frame_h, self.video_length, vp)
+            return vid, target
+        else: #'Incontinous':
+            target = random.randint(0, 1)
+            vp = video_params()
+            vp.ball_shape=0
+            if target > 0 :
+                vp.incontinous = True
+            vid = create_video(int(self.frame_w), self.frame_h, self.video_length, vp)
+            return vid, target
+
+  def get_number_of_test_classes(self):
+      if self.anomaly_type == 'Shapes':
+            return 6
+      else:  # 'Incontinous':
+            return 2
+
 
   def __repr__(self):
        return "BB_vid"
   def __str__(self):
       return self.__repr__()
-
-  def set_transforms(self, transforms):
-        self.transforms = transforms
 
   def get_transforms(self):
         return self.transforms
@@ -234,20 +238,28 @@ class balls_dataset(torch.utils.data.Dataset):
   def get_num_transforms(self):
         return len(self.transforms)
 
-  def get_number_of_data_classes(self):
-    return self.num_data_classes
-
   def train(self):
         self.train = True
 
   def test(self):
         self.train = False
 
-  def __len__(self):
-    if self.train:
-        return len(self.videos)*len(self.transforms)
-    else:
-        return len(self.videos)
+  def dump_debug_images(self, path):
+      os.makedirs(path, exist_ok=True)
+      debug_transforms_idxs = random.sample(range(len(self.transforms)), 5)
+      debug_serie_idxs = random.sample(range(len(self.videos)), 5)
+      for v_idx in debug_serie_idxs:
+          video = self.videos[v_idx]
+          write_array_as_video(video.astype(np.uint8), os.path.join(path, "vid_%d.avi" % (v_idx)))
+          for t_idx in debug_transforms_idxs:
+              t = self.transforms[t_idx]
+              t_vid = t(video)
+              write_array_as_video(t_vid.astype(np.uint8), os.path.join(path, "vid_%d_trasform_%d.avi" % (v_idx, t_idx)))
+          self.test()
+          vid, label = self.__getitem__(v_idx)
+          write_array_as_video(vid.astype(np.uint8), os.path.join(path, "vid_%d_test_label-%d.avi" % (v_idx, label)))
+
+
 
 
 

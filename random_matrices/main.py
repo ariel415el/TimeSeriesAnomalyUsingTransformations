@@ -9,30 +9,63 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 from transforms import *
-from utils import  write_array_as_video
 from config import args
 import dataset_1d
 import dataset_2d
-import models
+import models_1d
+import models_2d
 
-def get_val_datasets(args):
+def get_model(args):
+    if args.data_type == "2d":
+        model = models_2d.CNN3D(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).cuda()
+    else: # args.data_type == "1d"
+        model = models_1d.conv_FC(serie_size=args.num_frames, num_classes=args.num_transforms).cuda()
+
+    return model
+
+def get_transformer(args):
+    if args.transformations_type == "Permutations":
+        transformer = frame_permuter(args.num_transforms, args.num_frames, args.segment_size)
+
+    else: # Affine
+        if args.data_type == "2d":
+            transformer = fixed_affine_image_transformer(args.num_transforms)
+        else: # args.data_type == "1d"
+            transformer = fixed_affine_1d_transformer(args.num_transforms, args.num_frames)
+
+    return transformer
+
+def get_val_datasets(args, transforms):
     if args.data_type == "2d":
         val_dataset = dataset_2d.balls_dataset(frame_w=args.frame_w,
                                                 frame_h=args.frame_h,
                                                 video_length=args.num_frames,
-                                                num_videos=args.num_val_videos,
-                                                transforms=transformer.get_transforms())
+                                                num_videos=args.num_val_series,
+                                                transforms=transforms,
+                                                anomaly_type=args.anomaly_type)
 
-
+    else: # args.data_type == "1d"
+        val_dataset = dataset_1d.con_func_series_dataset(serie_length=args.num_frames,
+                                                         num_series=args.num_val_series,
+                                                         train=True,
+                                                         transforms=transforms,
+                                                         func_type=args.func_type)
     return val_dataset
 
-def get_train_datasets(args):
+def get_train_datasets(args, transforms):
     if args.data_type == "2d":
         train_dataset = dataset_2d.balls_dataset(frame_w=args.frame_w,
                                                   frame_h=args.frame_h,
                                                   video_length=args.num_frames,
-                                                  num_videos=args.num_train_videos,
-                                                  transforms=transformer.get_transforms())
+                                                  num_videos=args.num_train_series,
+                                                  transforms=transforms,
+                                                  anomaly_type=args.anomaly_type)
+    else: # args.data_type == "1d"
+        train_dataset = dataset_1d.con_func_series_dataset(serie_length=args.num_frames,
+                                                         num_series=args.num_train_series,
+                                                         train=True,
+                                                         transforms=transforms,
+                                                         func_type=args.func_type)
     return train_dataset
 
 def decrease_learning_rate(optimizer, lr_decay):
@@ -58,7 +91,7 @@ def train(args, model, train_loader, optimizer, epoch, tb_writer):
         mini_batch_examples = len(pred)
 
         gs = (epoch - 1) * len(train_loader) + batch_idx
-        tb_writer.add_scalar('train_loss', torch.tensor(loss.item()), global_step=gs)
+        tb_writer.add_scalar('loss', torch.tensor(loss.item()), global_step=gs)
         num_processed_imgs = (batch_idx + 1) * int(args.batch_size)
 
         if batch_idx % 50 == 0:
@@ -96,13 +129,13 @@ def validate(model, val_loader):
     b_val_loss = val_loss / num_batchs
     print('Validation: Average loss: {:.6f}({}/{}), correct {}/{}'.format(b_val_loss, val_loss, num_batchs, correct,
                                                                           len(val_loader.dataset)))
+    accuracy = correct / len(val_loader.dataset)
+    return b_val_loss, accuracy
 
-    return b_val_loss
-
-def test(args, model, test_loader, transforms, debug_dir=None):
+def test(model, test_loader):
     model.eval()
-    result_dict = {i: [] for i in range(test_loader.dataset.get_number_of_data_classes())}
-    os.makedirs("test_debug", exist_ok=True)
+    transforms = test_loader.dataset.get_transforms()
+    result_dict = {i: [] for i in range(test_loader.dataset.get_number_of_test_classes())}
     with torch.no_grad():
         for i, (serie, label) in enumerate(test_loader):
             serie = serie.cuda()
@@ -113,14 +146,6 @@ def test(args, model, test_loader, transforms, debug_dir=None):
                 transformed_series += [torch.tensor(np_serie).cpu()]
             transformed_series = torch.stack(transformed_series)
             output = model(transformed_series.cuda())
-            if debug_dir is not None:
-                os.makedirs(debug_dir,exist_ok=True)
-                if i < 5:
-                    write_array_as_video(serie.cpu().numpy()[0].astype(np.uint8),
-                                         os.path.join(debug_dir, "series_idx-%d_lable-%d.avi" % (i, label.item())))
-                    for j in range(30, 35):
-                        write_array_as_video(transformed_series[j].cpu().numpy().astype(np.uint8),
-                                             os.path.join(debug_dir, "series_%d_%d_%d.avi" % (i, j, label)))
 
             output = -1 * F.log_softmax(output, dim=1)
             score = torch.diagonal(output, 0, 0, 1).cpu().data.numpy().sum()
@@ -133,6 +158,7 @@ def test(args, model, test_loader, transforms, debug_dir=None):
     for i in range(1, len(result_dict)):
         all_fake_scores += result_dict[i]
 
+    print("Results fixing TPR to 100%")
     th = min(all_fake_scores)
     tp = np.sum(np.array(all_fake_scores) >= th)
     fp = np.sum(np.array(result_dict[0]) >= th)
@@ -140,7 +166,8 @@ def test(args, model, test_loader, transforms, debug_dir=None):
     print("tpr: %f" % (tp / len(all_fake_scores)))
     print("fpr: %f" % (fp / len(result_dict[0])))
 
-    th = np.array(all_fake_scores).mean()
+    print("Results fixing TPR to 50%")
+    th = np.median(np.array(all_fake_scores))
     tp = np.sum(np.array(all_fake_scores) >= th)
     fp = np.sum(np.array(result_dict[0]) >= th)
     print("th", th)
@@ -149,16 +176,12 @@ def test(args, model, test_loader, transforms, debug_dir=None):
 
 
 if __name__ == '__main__':
+
     kwargs = {'num_workers': args.num_workers, 'pin_memory': args.pin_memory}
     torch.manual_seed(args.seed)
-    # model_calss = models.conv_FC
-    # model_calss = models.multi_head_FC
-    # model = model_calss(args.num_transforms, args.num_frames, args.frame_w, args.frame_h).to(device)
 
-    model_calss = models.CNN3D
-    model = model_calss(args.num_transforms).cuda()
-
-    transformer = frame_permuter(args.num_transforms, args.num_frames, 1)
+    model = get_model(args)
+    transformer = get_transformer(args)
 
     transforms_file = os.path.join(args.train_dir, "transforms_def.npy")
     if args.trained_model != "":
@@ -170,38 +193,48 @@ if __name__ == '__main__':
         transformer.save_to_file(transforms_file)
 
     if args.test:
-        val_dataset = get_val_datasets(args)
+        val_dataset = get_val_datasets(args, transformer.get_transforms())
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, **kwargs)
-        # val_loss = validate(args, model, device, test_loader)
-        # print("val_loss: ", val_loss)
+        val_loss = validate(model, test_loader)
+        print("val_loss: ", val_loss)
 
         val_dataset.test()
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, **kwargs)
 
-        test(args, model, device, test_loader, transformer.get_transforms())
+        test(model, test_loader)
+        exit()
+
+    elif args.debug:
+        print("Debuging train and debug images")
+        dataset = get_val_datasets(args, transformer.get_transforms())
+        dataset.dump_debug_images("debug_%s"%args.data_type)
+        exit()
 
     else:
-        val_dataset = get_val_datasets(args)
-        train_dataset =  get_train_datasets(args)
+        val_dataset = get_val_datasets(args, transformer.get_transforms())
+        train_dataset =  get_train_datasets(args, transformer.get_transforms())
 
         train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
         val_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=True, **kwargs)
         # assert(train_dataset.get_permutations()==val_dataset.get_permutations())
         optimizer = optim.Adam(model.parameters(), lr=args.lr)
 
-        tb_writer = SummaryWriter(log_dir=args.train_dir)
+        train_writer = SummaryWriter(log_dir=os.path.join(args.train_dir,"train_log"))
+        val_writer = SummaryWriter(log_dir=os.path.join(args.train_dir,"val_log"))
+
         best_val = 99999
         pytorch_total_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
         print("Parametes in model: ~%.1fk" % (pytorch_total_params / 1000))
         print("Started training")
         for epoch in range(1, args.epochs + 1):
 
-            train(args, model, train_loader, optimizer, epoch, tb_writer)
+            train(args, model, train_loader, optimizer, epoch, train_writer)
 
-            val_loss = validate(args, model, val_loader)
+            val_loss, accuracy = validate(model, val_loader)
 
-            gs = (epoch - 1) * len(train_loader)
-            tb_writer.add_scalar('val_loss', torch.tensor(val_loss), global_step=gs)
+            gs = epoch * len(train_loader)
+            val_writer.add_scalar('loss', torch.tensor(val_loss), global_step=gs)
+            val_writer.add_scalar('accuracy', torch.tensor(accuracy), global_step=gs)
             if val_loss < best_val:
                 best_val = val_loss
                 torch.save(model.state_dict(),

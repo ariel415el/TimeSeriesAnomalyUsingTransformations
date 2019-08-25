@@ -1,40 +1,71 @@
-import os
-from PIL import Image
-
-import torch
-from torchvision import datasets, transforms
-
-import abc
 import itertools
 import numpy as np
-import scipy.ndimage
-
-import cv2
+from math import factorial
 import random
 from skimage.transform import AffineTransform,SimilarityTransform, warp
+import ast
 
+class matrix_applier(object):
+    def __init__(self, mat):
+        self.mat = mat
+    def __call__(self, serie):
+        return np.dot(self.mat, serie)
 
-class fixed_affine_transforms(object):
+class fixed_affine_1d_transformer(object):
+    def __init__(self, num_transforms, serie_length):
+        self.random_mats = []
+        for i in range(num_transforms):
+            self.random_mats += [np.random.rand(serie_length, serie_length)]
+        self.update_transforms()
+
+    def get_transforms(self):
+        return self.transforms
+
+    def set_mats(self, mats):
+        self.random_mats = mats
+
+    def update_transforms(self):
+        self.transforms = []
+        for mat in self.random_mats:
+            self.transforms += [matrix_applier(mat)]
+        print("Got %d transforms"% len(self.transforms))
+
+    def load_from_file(self,path):
+        with open(path, "rb") as f:
+            all_mats = np.load(f)
+            matrices = [all_mats[i] for i in range(all_mats.shape[0])]
+            self.set_mats(matrices)
+            self.update_transforms()
+
+    def save_to_file(self,path):
+        with open(path,"wb") as f:
+            np.save(f ,np.stack(self.random_mats, axis=0))
+
+class fixed_affine_image_transformer(object):
     def __init__(self, num_transforms, max_tx=8, max_ty=8):
-        assert(num_transforms <= 72)
         self.transforms = []
         for is_flip, tx, ty, sx, sy, k_rotate, shear in itertools.product((False, True),
-                                                       range(-max_tx,max_tx),
-                                                       range(-max_ty,max_ty),
-                                                       [1,2],
-                                                       [1,2],
-                                                       [0,30,60,90,120,150,180,210,240,270,300,330],
-                                                       [0,45,135,225,315]):
+                                                                          range(-max_tx,max_tx),
+                                                                          range(-max_ty,max_ty),
+                                                                          [1,2],
+                                                                          [1,2],
+                                                                          [0,30,60,120,150,210,240,300,330],
+                                                                          [0,45,135,225,315]):
             self.transforms += [AffineTransformation(is_flip, tx ,ty, sx, sy, k_rotate, shear)]
         print("Got %d transforms"% len(self.transforms))
-        self.transforms = random.sample(self.transforms, min(len(self.transforms), num_transforms))
+        if num_transforms > len(self.transforms):
+            print("Can't generate this much transforms")
+            exit(1)
+        if num_transforms < len(self.transforms):
+            self.transforms = self.transforms[:num_transforms]
+        # self.transforms = random.sample(self.transforms, min(len(self.transforms), num_transforms))
         print("Keep only %d transforms"% len(self.transforms))
 
     def get_transforms(self):
         return self.transforms
 
     def load_from_file(self,path):
-        return
+        return # Fixed transforms, no need to save
 
     def save_to_file(self,path):
         return
@@ -70,14 +101,15 @@ class perm_applier:
             tmp = np.array(np.split(vid_arr_batch, len(self.perm)))
             return np.concatenate(tmp[self.perm])
 
-
 class frame_permuter():
     def __init__(self, num_transforms, serie_length, segment_size):
+        assert (serie_length % segment_size == 0)
         self.perms = []
         self.transforms = []
         self.segment_size = segment_size
-        while len(self.perms) != num_transforms:
-            perm = random.sample(range(serie_length), serie_length)
+        perm_length = int(serie_length/segment_size)
+        while len(self.perms) != min(num_transforms, factorial(perm_length)):
+            perm = random.sample(range(perm_length), perm_length)
             if perm not in self.perms:
                 self.perms += [perm]
 
@@ -95,7 +127,11 @@ class frame_permuter():
 
     def load_from_file(self, path):
         lines = open(path,'r').readlines()
-        self.perms = [list(line.strip()) for line in lines]
+        self.perms = []
+        for line in lines:
+            strings_list = ast.literal_eval(line.strip())
+            l = [int(x) for x in strings_list]
+            self.perms += [l]
         self.update_transforms()
 
     def save_to_file(self,path):
@@ -103,52 +139,4 @@ class frame_permuter():
         for perm in self.perms:
             f.write(str(perm)+"\n")
         f.close()
-
-
-
-# def get_random_triangle(im_shape):
-#     x = np.zeros((3,2))
-#     for i in range(3):
-#         x[i][0] = np.random.randint(im_shape[1])
-#         x[i][1] = np.random.randint(im_shape[0])
-#     return x
-
-# def get_affine_matrices(num_mats):
-#     matrices = []
-
-#     for i in range(num_mats):
-#         src, dst = get_random_triangle((128,128)), get_random_triangle((128,128))
-#         matrices += [cv2.getAffineTransform(src.astype(np.float32),dst.astype(np.float32)) ]
-#     return matrices
-
-# class random_affine_matrices():
-#     def __init__(self, num_transforms):
-#         self.transforms = []
-#         for i in range(num_mats):
-#             src, dst = get_random_triangle((128,128)), get_random_triangle((128,128))
-#             mat =  cv2.getAffineTransform(src.astype(np.float32),dst.astype(np.float32))
-
-
-#     def get_transforms(self):
-#         return self.transforms
-
-#     def load_from_file(self, path):
-#          with open(path,"rb") as f:
-#                 all_mats = np.load(f)
-#                 self.matrices = [all_mats[i] for i in range(all_mats.shape[0])]
-
-#     def save_to_file(self,path):
-#         return  
-
-# class apply_3x2_affine_matrix():
-#     def __init__(self, matrix):
-#         self.matrix = matrix
-
-#     def __call__(self, x):
-#         x_3d = x.copy()
-#         x_3d = np.expand_dims(x_3d,3)
-#         for i in range(x_3d.shape[0]):
-            
-#         x_3d = x_3d.squeeze(3)
-#         return x_3d
 
