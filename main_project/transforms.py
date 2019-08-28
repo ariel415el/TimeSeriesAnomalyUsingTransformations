@@ -15,7 +15,8 @@ class fixed_affine_1d_transformer(object):
     def __init__(self, num_transforms, serie_length):
         self.random_mats = []
         for i in range(num_transforms):
-            self.random_mats += [np.random.rand(serie_length, serie_length)]
+            rand_mat = np.random.rand(serie_length, serie_length)
+            self.random_mats += [rand_mat / rand_mat.mean()]
         self.update_transforms()
 
     def get_transforms(self):
