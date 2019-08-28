@@ -1,6 +1,7 @@
 import os
 import time
 import numpy as np
+import sklearn.metrics as metrics
 
 import torch
 import torch.optim as optim
@@ -15,11 +16,17 @@ import dataset_2d
 import models_1d
 import models_2d
 
+def log_and_print(f, s):
+    print(s)
+    if f is not None:
+        f.write(s)
+        f.write("\n")
+
 def get_model(args):
     if args.data_type == "2d":
-        model = models_2d.CNN3D(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).cuda()
+        model = models_2d.CNN3D(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).to(torch.device("cuda:%d"%args.gpu_id))
     else: # args.data_type == "1d"
-        model = models_1d.conv_FC(serie_size=args.num_frames, num_classes=args.num_transforms).cuda()
+        model = models_1d.conv_FC(serie_size=args.num_frames, num_classes=args.num_transforms).to(torch.device("cuda:%d"%args.gpu_id))
 
     return model
 
@@ -77,8 +84,8 @@ def train(args, model, train_loader, optimizer, epoch, tb_writer):
     start = time.time()
     optimizer.zero_grad()
     for batch_idx, (data, target) in enumerate(train_loader):
-        data = data.cuda(non_blocking=True)
-        target = target.cuda(non_blocking=True)
+        data = data.to(torch.device("cuda:%d"%args.gpu_id),non_blocking=True)
+        target = target.to(torch.device("cuda:%d"%args.gpu_id), non_blocking=True)
 
         output = model(data)
 
@@ -114,7 +121,7 @@ def validate(model, val_loader):
     num_batchs = len(val_loader)
     with torch.no_grad():
         for i, (data, target) in enumerate(val_loader):
-            data, target = data.cuda(), target.cuda()
+            data, target = data.to(torch.device("cuda:%d"%args.gpu_id)), target.to(torch.device("cuda:%d"%args.gpu_id))
             # Inference
             output = model(data)
 
@@ -132,20 +139,20 @@ def validate(model, val_loader):
     accuracy = correct / len(val_loader.dataset)
     return b_val_loss, accuracy
 
-def test(model, test_loader):
+def test(model, test_loader, gpu_idx, log_file=None):
     model.eval()
     transforms = test_loader.dataset.get_transforms()
     result_dict = {i: [] for i in range(test_loader.dataset.get_number_of_test_classes())}
     with torch.no_grad():
         for i, (serie, label) in enumerate(test_loader):
-            serie = serie.cuda()
+            serie = serie.to(torch.device("cuda:%d"%gpu_idx))
             transformed_series = []
             for j, transform in enumerate(transforms):
                 np_serie = serie.detach().cpu().numpy()[0].astype(np.float32)
-                np_serie = transform(np_serie)
+                np_serie = transform(np_serie).astype(np.float32)
                 transformed_series += [torch.tensor(np_serie).cpu()]
             transformed_series = torch.stack(transformed_series)
-            output = model(transformed_series.cuda())
+            output = model(transformed_series.to(torch.device("cuda:%d"%gpu_idx)))
 
             output = -1 * F.log_softmax(output, dim=1)
             score = torch.diagonal(output, 0, 0, 1).cpu().data.numpy().sum()
@@ -153,26 +160,30 @@ def test(model, test_loader):
             result_dict[label.item()] += [score]
 
     for k in result_dict:
-        print("%d: avg_score (%d): %.8f" % (k, len(result_dict[k]), np.mean(result_dict[k])))
+        log_and_print(log_file,"%d: avg_score (%d): %.8f" % (k, len(result_dict[k]), np.mean(result_dict[k])))
     all_fake_scores = []
     for i in range(1, len(result_dict)):
         all_fake_scores += result_dict[i]
 
-    print("Results fixing TPR to 100%")
+    auc_scores = np.concatenate((result_dict[0], all_fake_scores))
+    auc_labels = np.concatenate([np.zeros(len(result_dict[0])), np.ones(len(all_fake_scores))])
+    auc = metrics.roc_auc_score(auc_labels, auc_scores)
+    log_and_print(log_file, "AUC: %f"% auc)
+    log_and_print(log_file,"Results fixing TPR to 100%")
     th = min(all_fake_scores)
     tp = np.sum(np.array(all_fake_scores) >= th)
     fp = np.sum(np.array(result_dict[0]) >= th)
-    print("th", th)
-    print("tpr: %f" % (tp / len(all_fake_scores)))
-    print("fpr: %f" % (fp / len(result_dict[0])))
+    log_and_print(log_file,"th %f"%th)
+    log_and_print(log_file,"tpr: %f" % (tp / len(all_fake_scores)))
+    log_and_print(log_file,"fpr: %f" % (fp / len(result_dict[0])))
 
-    print("Results fixing TPR to 50%")
+    log_and_print(log_file,"Results fixing TPR to 50%")
     th = np.median(np.array(all_fake_scores))
     tp = np.sum(np.array(all_fake_scores) >= th)
     fp = np.sum(np.array(result_dict[0]) >= th)
-    print("th", th)
-    print("tpr: %f" % (tp / len(all_fake_scores)))
-    print("fpr: %f" % (fp / len(result_dict[0])))
+    log_and_print(log_file,"th %f"%th)
+    log_and_print(log_file,"tpr: %f" % (tp / len(all_fake_scores)))
+    log_and_print(log_file,"fpr: %f" % (fp / len(result_dict[0])))
 
 
 if __name__ == '__main__':
@@ -193,15 +204,17 @@ if __name__ == '__main__':
         transformer.save_to_file(transforms_file)
 
     if args.test:
+        test_log = open(os.path.join(args.train_dir, "test-log.txt"), "w")
         val_dataset = get_val_datasets(args, transformer.get_transforms())
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=args.batch_size, shuffle=False, **kwargs)
-        val_loss = validate(model, test_loader)
-        print("val_loss: ", val_loss)
+        val_loss, accuracy = validate(model, test_loader)
+        log_and_print(test_log, "val_loss: %f; accuracy %f"%(val_loss,accuracy))
 
         val_dataset.test()
         test_loader = torch.utils.data.DataLoader(val_dataset, batch_size=1, shuffle=False, **kwargs)
 
-        test(model, test_loader)
+        test(model, test_loader, args.gpu_id, test_log)
+        test_log.close()
         exit()
 
     elif args.debug:
