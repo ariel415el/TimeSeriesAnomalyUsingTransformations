@@ -24,7 +24,10 @@ def log_and_print(f, s):
 
 def get_model(args):
     if args.data_type == "2d":
-        model = models_2d.CNN3D(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).to(torch.device("cuda:%d"%args.gpu_id))
+        if args.model_type == "3dcnn":
+            model = models_2d.CNN3D(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).to(torch.device("cuda:%d"%args.gpu_id))
+        else:
+            model = models_2d.multi_head_FC(args.num_transforms, t_dim=args.num_frames, img_x=args.frame_w, img_y=args.frame_w).to(torch.device("cuda:%d"%args.gpu_id))
     else: # args.data_type == "1d"
         model = models_1d.conv_FC(serie_size=args.num_frames, num_classes=args.num_transforms).to(torch.device("cuda:%d"%args.gpu_id))
 

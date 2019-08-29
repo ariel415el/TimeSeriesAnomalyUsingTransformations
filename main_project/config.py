@@ -19,6 +19,7 @@ parser.add_argument('--func_type', type=str, default="Power-Sinus", help='Linear
 
 # 2d dataset config
 parser.add_argument('--anomaly_type', type=str, default="Shapes", help='Shapes/Incontinous')
+parser.add_argument('--model_type', type=str, default="3dcnn", help='3dcnn/multi_head')
 parser.add_argument('--frame_h', type=int, default=128)
 parser.add_argument('--frame_w', type=int, default=128)
 
@@ -34,7 +35,7 @@ if args.data_type == "2d":
     args.segment_size = 1
     args.batch_size = 80
     if args.train_dir == "":
-        args.train_dir = "training-2d-%s-%s"%(args.transformations_type, args.anomaly_type)
+        args.train_dir = "training-2d-%s-%s-%s"%(args.transformations_type, args.anomaly_type, args.model_type)
 else:
     args.batch_size = 256
     args.num_frames = 128
